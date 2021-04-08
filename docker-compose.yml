@@ -23,7 +23,7 @@ services:
       - ./:/usr/local/apache2/htdocs
     working_dir: /usr/local/apache2/htdocs
     ports:
-      - 8000:80
+      - 80:80
     depends_on:
       - php
   elasticsearch:
