@@ -44,13 +44,13 @@ class ElasticController extends AbstractController
     /**
      * @Route("/rest/get-objects-from-selected-tags/{type}/{tagids}", defaults={"type"="","tagids"=""}, name="elastic_search", methods={"GET"})
      */
-    public function search(Client $client, Request $request, string $type, string $tagids): JsonResponse
+    public function search(Client $client, Request $request, array $elasticIndex, string $type, string $tagids): JsonResponse
     {
         // $query = $request->query->get('q');
         $startTime  = microtime(true);
-        $searchDefinition   = [];
+        $searchDefinition   = $elasticIndex;
         if ($type) {
-            $searchDefinition   = [
+            $searchDefinition   += [
                 'type'  => $type
             ];
         }
@@ -88,7 +88,7 @@ class ElasticController extends AbstractController
     /**
      * @Route("/rest/get-facets-of-tags/{tags}", defaults={"tags"=""}, name="elastic_facets", methods={"GET"})
      */
-    public function facets(Client $client, Request $request, string $tags): JsonResponse
+    public function facets(Client $client, Request $request, array $elasticIndex, string $tags): JsonResponse
     {
         $startTime          = microtime(true);
 
@@ -97,7 +97,7 @@ class ElasticController extends AbstractController
             $aggregated         = [];
 
             foreach ($tagids as $key => $tagid) {
-                $searchDefinition   = [
+                $searchDefinition   = $elasticIndex + [
                     'body' => [
                         'query' => [
                             'match' => [

@@ -20,13 +20,25 @@ class ElasticLoadJsonDataCommand extends Command
     private $client;
 
     /**
+     * @var string
+     */
+    private $dataFile;
+
+    /**
+     * @var array
+     */
+    private $elasticIndex;
+
+    /**
      * command constructor.
      * 
      * @param Client $client
      */
-    public function __construct(Client $client)
+    public function __construct(Client $client, string $dataFile, array $elasticIndex)
     {
-        $this->client = $client;
+        $this->client       = $client;
+        $this->dataFile     = $dataFile;
+        $this->elasticIndex = $elasticIndex;
         parent::__construct(null);
     }
 
@@ -34,120 +46,60 @@ class ElasticLoadJsonDataCommand extends Command
     {
         $this
             ->setDescription('Load elastic data from specified json file')
-            ->addOption('index', null, InputOption::VALUE_OPTIONAL, 'Name of the index to repopulate', 'index')
-            ->addArgument('file', InputArgument::OPTIONAL, 'Pass the json file path respect to application root', './.wiki/elasticsearchdata.json')
+            // ->addOption('index', null, InputOption::VALUE_OPTIONAL, 'Name of the index to repopulate', 'index')
+            // ->addArgument('file', InputArgument::OPTIONAL, 'Pass the json file path respect to application root', './.wiki/elasticsearchdata.json')
         ;
     }
 
+    /**
+     * @param InputInterface $input
+     * @param OutputInterface $output
+     * @return int
+     */
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
         $io     = new SymfonyStyle($input, $output);
 
-        $io->note(sprintf('You passed json-file path: %s', $input->getArgument('file')));
+        $io->note(sprintf('You passed json-file path: %s', $this->dataFile));
 
-        $io->note(sprintf('You passed indexed name: %s', $input->getOption('index')));
+        $io->note(sprintf('You passed indexed name: %s', $this->elasticIndex['index']));
 
-        $this->populateJson($input->getArgument('file'));
+        $io->note('Populating Index ....');
+        $this->populateJson();
 
-        $io->success('Populating Elasticsearch from "'. $input->getArgument('file') .'" with index "'. $input->getOption('index') .'"');
+        $io->success('Populating Elasticsearch from "'. $this->dataFile .'" with index "'. $this->elasticIndex['index'] .'"');
 
         return 0;
     }
 
     /**
-     * Creates index with mapping and analyzer.
-     * 
-     * @param string $indexName
-     */
-    private function createIndex(string $indexName): void
-    {
-
-        $this->client->indices()->create(
-            array_merge(
-                [
-                    'index' => $indexName,
-                    'type'  => $indexName .'-type'
-                ],
-                [
-                    'body' => [
-                        'settings' => [
-                            'number_of_shards' => 1,
-                            'number_of_replicas' => 0,
-                            "analysis" => [
-                                "analyzer" => [
-                                    "autocomplete" => [
-                                        "tokenizer" => "autocomplete",
-                                        "filter" => ["lowercase"]
-                                    ]
-                                ],
-                                "tokenizer" => [
-                                    "autocomplete" => [
-                                        "type" => "edge_ngram",
-                                        "min_gram" => 2,
-                                        "max_gram" => 20,
-                                        "token_chars" => [
-                                            "letter",
-                                            "digit"
-                                        ]
-                                    ]
-                                ]
-                            ]
-                        ],
-                        "mappings" => [
-                            "properties" => [
-                                "title" => [
-                                    "type" => "text",
-                                    "analyzer" => "autocomplete",
-                                    "search_analyzer" => "standard"
-                                ]
-                            ]
-                        ]
-                    ]
-                ]
-            )
-        );
-    }
-
-
-    /**
      * Parse json and populate the data to Elasticsearch.
-     * 
-     * @param string $dataPath
      */
-    private function populateJson(string $dataPath): void
+    private function populateJson(): void
     {
-        $jsonContent    = file_get_contents($dataPath);
+        if ($this->client->indices()->exists($this->elasticIndex)){
+            $this->client->indices()->delete($this->elasticIndex);
+        }
+
+        $jsonContent    = file_get_contents($this->dataFile);
         $jsonDocs       = json_decode($jsonContent, true);
 
         if (array_key_exists('hits', $jsonDocs) && array_key_exists('hits', $jsonDocs['hits'])) {
             foreach ($jsonDocs['hits']['hits'] as $id => $hit) {
-                $this->client->index([
-                    'index' => $hit['_index'],
+                $doc    = $this->elasticIndex + [
                     'type'  => $hit['_type'],
                     'id'    => $hit['_id'],
                     'body'  => $hit['_source']
-                ]);
+                ];
+                $this->client->index($doc);
+
+                // $this->client->index([
+
+                //     'type'  => $hit['_type'],
+                //     'id'    => $hit['_id'],
+                //     'body'  => $hit['_source']
+                // ]);
             }
         }
-
-        // $productFile->fgetcsv();//ignore headline
-
-        // while ($data = $productFile->fgetcsv()) {
-        //     list($rowIdx, $title, $price, $retailer, $rating, $desc) = $data;
-        //     $doc = array_merge(
-        //         $this->indexDefinition,
-        //         [
-        //             'id' => $rowIdx,
-        //             'body' => [
-        //                 'title' => $title,
-        //                 'price' => (float)$price,
-        //                 'retailer' => $retailer,
-        //                 'rating' => (float)$rating,
-        //                 'desc' => $desc
-        //             ]
-        //         ]
-        //     );
-        //     $this->client->index($doc);
-        // }
     }
 }
